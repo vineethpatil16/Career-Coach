@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { useIkigai } from '../hooks/useIkigai'
 import { motion } from 'framer-motion'
 import { Heart, DollarSign, Users, Star, ArrowRight, ArrowLeft, RotateCcw } from 'lucide-react'
 
 const IkigaiPage = () => {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const { ikigai, loading, createIkigai, updateIkigai } = useIkigai()
+  
   const [currentStep, setCurrentStep] = useState(0)
   const [responses, setResponses] = useState({
     whatYouLove: [],
@@ -19,12 +24,28 @@ const IkigaiPage = () => {
 
   // Check if Ikigai was already completed
   useEffect(() => {
-    const completed = localStorage.getItem('ikigaiCompleted')
-    if (completed === 'true') {
+    if (ikigai) {
       setAlreadyCompleted(true)
+      
+      // If user already has ikigai data, populate the responses
+      try {
+        if (ikigai.responses) {
+          const savedResponses = typeof ikigai.responses === 'string' 
+            ? JSON.parse(ikigai.responses) 
+            : ikigai.responses;
+          
+          setResponses(savedResponses);
+        }
+      } catch (error) {
+        console.error('Error parsing ikigai responses:', error);
+      }
+    }
+    
+    const localCompleted = localStorage.getItem('ikigaiCompleted')
+    if (localCompleted === 'true') {
       setIsComplete(true)
     }
-  }, [])
+  }, [ikigai])
 
   const ikigaiQuestions = [
     {
@@ -136,34 +157,50 @@ const IkigaiPage = () => {
   }
 
   const generateIkigai = () => {
-    // This would typically call an AI service to analyze responses
+    // Derive values from actual user inputs
+    const loves = responses.whatYouLove.join(", ");
+    const skills = responses.whatYoureGoodAt.join(", ");
+    const needs = responses.whatTheWorldNeeds.join(", ");
+    const paid = responses.whatYouCanBePaidFor.join(", ");
+    
     return {
-      passion: "Technology and helping others learn",
-      mission: "Democratizing education through technology",
-      profession: "Educational Technology Developer",
-      vocation: "Creating accessible learning platforms",
-      ikigai: "Empowering people through innovative educational technology solutions"
+      passion: loves.length > 0 ? loves : "Technology and helping others learn",
+      mission: needs.length > 0 ? needs : "Democratizing education through technology",
+      profession: paid.length > 0 ? paid : "Educational Technology Developer",
+      vocation: skills.length > 0 ? skills : "Creating accessible learning platforms",
+      ikigai: `Combining ${loves.substring(0, 30)}... with ${skills.substring(0, 30)}... to address ${needs.substring(0, 30)}...`
     }
   }
 
   const handleSaveIkigai = async () => {
+    if (!user) {
+      alert('Please sign in to save your Ikigai')
+      return
+    }
+    
     setIsSaving(true)
     try {
       const ikigaiData = {
-        responses,
-        generatedIkigai: generateIkigai(),
-        completedAt: new Date().toISOString()
+        user_id: user.id,
+        responses: JSON.stringify(responses),
+        generated_ikigai: JSON.stringify(generateIkigai()),
+        completed_at: new Date().toISOString()
       }
       
-      // TODO: Save to Supabase
-      console.log('Saving Ikigai:', ikigaiData)
+      let result;
+      
+      if (ikigai) {
+        // Update existing ikigai
+        result = await updateIkigai(ikigaiData)
+      } else {
+        // Create new ikigai
+        result = await createIkigai(ikigaiData)
+      }
+      
+      if (result.error) throw result.error
       
       // Save to localStorage for persistence
-      localStorage.setItem('ikigaiData', JSON.stringify(ikigaiData))
       localStorage.setItem('ikigaiCompleted', 'true')
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
       
       // Navigate to dashboard after successful save
       navigate('/dashboard', { 
@@ -184,8 +221,19 @@ const IkigaiPage = () => {
     navigate('/dashboard')
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your Ikigai journey...</p>
+        </div>
+      </div>
+    )
+  }
+
   if (isComplete) {
-    const ikigai = generateIkigai()
+    const ikigaiResult = generateIkigai()
     
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-6">
@@ -211,28 +259,28 @@ const IkigaiPage = () => {
               <div className="space-y-6">
                 <div className="p-4 bg-red-50 rounded-lg">
                   <h3 className="font-semibold text-red-700 mb-2">Your Passion</h3>
-                  <p className="text-gray-700">{ikigai.passion}</p>
+                  <p className="text-gray-700">{ikigaiResult.passion}</p>
                 </div>
                 <div className="p-4 bg-green-50 rounded-lg">
                   <h3 className="font-semibold text-green-700 mb-2">Your Mission</h3>
-                  <p className="text-gray-700">{ikigai.mission}</p>
+                  <p className="text-gray-700">{ikigaiResult.mission}</p>
                 </div>
               </div>
               <div className="space-y-6">
                 <div className="p-4 bg-yellow-50 rounded-lg">
                   <h3 className="font-semibold text-yellow-700 mb-2">Your Profession</h3>
-                  <p className="text-gray-700">{ikigai.profession}</p>
+                  <p className="text-gray-700">{ikigaiResult.profession}</p>
                 </div>
                 <div className="p-4 bg-blue-50 rounded-lg">
                   <h3 className="font-semibold text-blue-700 mb-2">Your Vocation</h3>
-                  <p className="text-gray-700">{ikigai.vocation}</p>
+                  <p className="text-gray-700">{ikigaiResult.vocation}</p>
                 </div>
               </div>
             </div>
 
             <div className="text-center p-6 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg mb-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Your Ikigai</h2>
-              <p className="text-lg text-gray-700 italic">"{ikigai.ikigai}"</p>
+              <p className="text-lg text-gray-700 italic">"{ikigaiResult.ikigai}"</p>
             </div>
 
             <div className="flex justify-center space-x-4">
@@ -255,7 +303,7 @@ const IkigaiPage = () => {
                   </>
                 ) : (
                   <>
-                    Save My Ikigai
+                    {alreadyCompleted ? 'Update My Ikigai' : 'Save My Ikigai'}
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </>
                 )}

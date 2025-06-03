@@ -10,6 +10,9 @@ import ExplorePage from './pages/ExplorePage'
 import ReflectPage from './pages/ReflectPage'
 import ActPage from './pages/ActPage'
 import TrackProgressPage from './pages/TrackProgressPage'
+import QuizPage from './pages/QuizPage'
+import CaseStudyWorkspace from './pages/CaseStudyWorkspace'
+import CompaniesPage from './pages/CompaniesPage'
 
 
 function App() {
@@ -27,6 +30,8 @@ function App() {
             <Route path="/explore" element={<ExplorePage />} />
             <Route path="/reflect" element={<ReflectPage />} />
             <Route path="/act" element={<ActPage />} />
+            <Route path="/quiz" element={<QuizPage />} />
+            <Route path="/case-studies" element={<CaseStudyWorkspace />} />
             <Route path="/trackprogress" element={<TrackProgressPage />}/>
           </Routes>
         </div>

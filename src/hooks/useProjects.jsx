@@ -8,28 +8,22 @@ export const useProjects = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const fetchProjects = async () => {
-    if (!user) {
-      setProjects([])
-      setLoading(false)
-      return
-    }
-
-    try {
-      setLoading(true)
-      setError(null)
-      const { data, error: fetchError } = await projectService.getAll(user.id)
-      
-      if (fetchError) throw fetchError
-      
-      setProjects(data || [])
-    } catch (err) {
-      setError(err)
-      console.error('Error fetching projects:', err)
-    } finally {
-      setLoading(false)
-    }
+  // In useProjects.jsx
+const fetchProjects = async () => {
+  if (!user) return;
+  
+  try {
+    setLoading(true);
+    const { data, error } = await projectService.getAll(user.id);
+    
+    if (error) throw error;
+    setProjects(data || []);
+  } catch (err) {
+    console.error('Error fetching projects:', err);
+  } finally {
+    setLoading(false);
   }
+}
 
   useEffect(() => {
     fetchProjects()

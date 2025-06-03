@@ -1,6 +1,8 @@
-import { useState } from 'react'
+// src/pages/ActPage.jsx
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { useAuth } from '../context/AuthContext'
 import { 
   Building2, 
   Send, 
@@ -18,14 +20,39 @@ import {
   AlertCircle,
   Star,
   Filter,
-  ArrowLeft
+  ArrowLeft,
+  Eye
 } from 'lucide-react'
+import {
+  companyService,
+  jobApplicationService,
+  messageTemplateService
+} from '../services/supabaseServices'
 
 const ActPage = () => {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('target-companies')
   const [showAddCompany, setShowAddCompany] = useState(false)
   const [showMessageGenerator, setShowMessageGenerator] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  // State for different sections
+  const [companies, setCompanies] = useState([])
+  const [jobApplications, setJobApplications] = useState([])
+  const [messageTemplates, setMessageTemplates] = useState([])
+  const [newCompany, setNewCompany] = useState({
+    company_name: '',
+    industry: '',
+    location: '',
+    company_size: '',
+    priority_level: 'medium',
+    status: 'interested',
+    notes: '',
+    website_url: ''
+  })
 
   const tabs = [
     { id: 'target-companies', label: 'Target Companies', icon: Building2 },
@@ -34,193 +61,129 @@ const ActPage = () => {
     { id: 'interviews', label: 'Mock Interviews', icon: Calendar }
   ]
 
-  const targetCompanies = [
-    {
-      id: 1,
-      name: 'Google',
-      industry: 'Technology',
-      size: 'Large (10,000+)',
-      priority: 'high',
-      status: 'actively_applying',
-      openPositions: 12,
-      matchScore: 85,
-      lastUpdate: '2024-06-01',
-      notes: 'Great culture fit, strong AI/ML teams',
-      contacts: [
-        { name: 'Sarah Chen', role: 'Engineering Manager', status: 'contacted' },
-        { name: 'Mike Johnson', role: 'Recruiter', status: 'responded' }
-      ],
-      recentActivity: [
-        { type: 'application', position: 'Software Engineer II', date: '2024-05-28' },
-        { type: 'outreach', contact: 'Sarah Chen', date: '2024-05-25' }
-      ]
-    },
-    {
-      id: 2,
-      name: 'Microsoft',
-      industry: 'Technology',
-      size: 'Large (10,000+)',
-      priority: 'high',
-      status: 'researching',
-      openPositions: 8,
-      matchScore: 78,
-      lastUpdate: '2024-05-30',
-      notes: 'Azure team looks interesting, good work-life balance',
-      contacts: [
-        { name: 'Alex Rodriguez', role: 'Senior Engineer', status: 'pending' }
-      ],
-      recentActivity: [
-        { type: 'research', activity: 'Completed company analysis', date: '2024-05-30' }
-      ]
-    },
-    {
-      id: 3,
-      name: 'Stripe',
-      industry: 'Fintech',
-      size: 'Medium (1,000-10,000)',
-      priority: 'medium',
-      status: 'interested',
-      openPositions: 5,
-      matchScore: 92,
-      lastUpdate: '2024-05-28',
-      notes: 'Perfect tech stack match, remote-friendly',
-      contacts: [],
-      recentActivity: []
+  // Load data on component mount
+  useEffect(() => {
+    if (user) {
+      loadData()
     }
-  ]
+  }, [user])
 
-  const jobApplications = [
-    {
-      id: 1,
-      company: 'Google',
-      position: 'Software Engineer II',
-      location: 'Mountain View, CA',
-      appliedDate: '2024-05-28',
-      status: 'phone_screen',
-      salary: '$140,000 - $180,000',
-      nextStep: 'Technical Interview',
-      nextStepDate: '2024-06-05',
-      recruiter: 'Sarah Chen',
-      notes: 'Phone screen went well, focus on system design',
-      timeline: [
-        { stage: 'Applied', date: '2024-05-28', completed: true },
-        { stage: 'Phone Screen', date: '2024-06-01', completed: true },
-        { stage: 'Technical Interview', date: '2024-06-05', completed: false },
-        { stage: 'Final Interview', date: 'TBD', completed: false }
-      ]
-    },
-    {
-      id: 2,
-      company: 'Microsoft',
-      position: 'Senior Software Engineer',
-      location: 'Seattle, WA',
-      appliedDate: '2024-05-25',
-      status: 'technical_interview',
-      salary: '$150,000 - $190,000',
-      nextStep: 'Final Round',
-      nextStepDate: '2024-06-08',
-      recruiter: 'Mike Johnson',
-      notes: 'Strong technical round, team fit interview next',
-      timeline: [
-        { stage: 'Applied', date: '2024-05-25', completed: true },
-        { stage: 'Phone Screen', date: '2024-05-28', completed: true },
-        { stage: 'Technical Interview', date: '2024-06-02', completed: true },
-        { stage: 'Final Interview', date: '2024-06-08', completed: false }
-      ]
-    },
-    {
-      id: 3,
-      company: 'Stripe',
-      position: 'Full Stack Engineer',
-      location: 'Remote',
-      appliedDate: '2024-05-20',
-      status: 'rejected',
-      salary: '$130,000 - $170,000',
-      nextStep: null,
-      nextStepDate: null,
-      recruiter: 'Alex Kim',
-      notes: 'Not selected for next round, feedback: need more backend experience',
-      timeline: [
-        { stage: 'Applied', date: '2024-05-20', completed: true },
-        { stage: 'Phone Screen', date: '2024-05-23', completed: true },
-        { stage: 'Rejected', date: '2024-05-26', completed: true }
-      ]
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      setError('')
+
+      // Load all data concurrently
+      const [companiesResult, applicationsResult, templatesResult] = await Promise.all([
+        companyService.getAll(user.id),
+        jobApplicationService.getAll(user.id),
+        messageTemplateService.getAll(user.id)
+      ])
+
+      if (companiesResult.error) {
+        console.error('Error loading companies:', companiesResult.error)
+      } else {
+        setCompanies(companiesResult.data || [])
+      }
+
+      if (applicationsResult.error) {
+        console.error('Error loading applications:', applicationsResult.error)
+      } else {
+        setJobApplications(applicationsResult.data || [])
+      }
+
+      if (templatesResult.error) {
+        console.error('Error loading templates:', templatesResult.error)
+      } else {
+        setMessageTemplates(templatesResult.data || [])
+      }
+
+    } catch (err) {
+      console.error('Error loading data:', err)
+      setError('Failed to load data')
+    } finally {
+      setLoading(false)
     }
-  ]
+  }
 
-  const messageTemplates = [
-    {
-      id: 1,
-      type: 'recruiter',
-      title: 'Initial Recruiter Outreach',
-      subject: 'Interested in {position} at {company}',
-      content: `Hi {recruiter_name},
-
-I hope this message finds you well. I'm reaching out regarding the {position} role at {company}. With my background in {your_skills}, I believe I'd be a strong fit for this position.
-
-I'm particularly excited about {company}'s work in {specific_area} and would love to discuss how my experience in {relevant_experience} could contribute to your team.
-
-Would you be available for a brief call this week to discuss the opportunity?
-
-Best regards,
-{your_name}`,
-      variables: ['recruiter_name', 'position', 'company', 'your_skills', 'specific_area', 'relevant_experience', 'your_name']
-    },
-    {
-      id: 2,
-      type: 'networking',
-      title: 'Networking Connection',
-      subject: 'Fellow {mutual_connection} - Would love to connect',
-      content: `Hi {contact_name},
-
-I came across your profile through {mutual_connection} and was impressed by your work at {company}. I'm currently exploring opportunities in {industry} and would love to learn more about your experience.
-
-Would you be open to a brief coffee chat or virtual call? I'd be happy to share my background and learn about your journey at {company}.
-
-Looking forward to connecting!
-
-Best,
-{your_name}`,
-      variables: ['contact_name', 'mutual_connection', 'company', 'industry', 'your_name']
+  const handleAddCompany = async () => {
+    if (!newCompany.company_name.trim()) {
+      setError('Company name is required')
+      return
     }
-  ]
 
-  const upcomingInterviews = [
-    {
-      id: 1,
-      company: 'Google',
-      position: 'Software Engineer II',
-      type: 'Technical Interview',
-      date: '2024-06-05',
-      time: '2:00 PM PST',
-      interviewer: 'David Park',
-      duration: '60 minutes',
-      platform: 'Google Meet',
-      preparationNotes: [
-        'Review system design fundamentals',
-        'Practice coding problems on LeetCode',
-        'Research Google\'s engineering culture'
-      ],
-      status: 'scheduled'
-    },
-    {
-      id: 2,
-      company: 'Microsoft',
-      position: 'Senior Software Engineer',
-      type: 'Final Round',
-      date: '2024-06-08',
-      time: '10:00 AM PST',
-      interviewer: 'Lisa Zhang',
-      duration: '90 minutes',
-      platform: 'Microsoft Teams',
-      preparationNotes: [
-        'Prepare behavioral examples using STAR method',
-        'Review Azure services and architecture',
-        'Prepare questions about team dynamics'
-      ],
-      status: 'scheduled'
+    try {
+      setError('')
+      const companyData = {
+        user_id: user.id,
+        ...newCompany,
+        created_at: new Date().toISOString()
+      }
+
+      const { data, error: createError } = await companyService.create(companyData)
+      
+      if (createError) {
+        throw createError
+      }
+
+      setCompanies(prev => [data, ...prev])
+      setNewCompany({
+        company_name: '',
+        industry: '',
+        location: '',
+        company_size: '',
+        priority_level: 'medium',
+        status: 'interested',
+        notes: '',
+        website_url: ''
+      })
+      setShowAddCompany(false)
+      setSuccess('Company added successfully!')
+      
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (error) {
+      console.error('Error adding company:', error)
+      setError('Failed to add company')
     }
-  ]
+  }
+
+  const handleDeleteCompany = async (companyId) => {
+    if (!confirm('Are you sure you want to delete this company?')) return
+
+    try {
+      const { error: deleteError } = await companyService.delete(companyId)
+      
+      if (deleteError) {
+        throw deleteError
+      }
+
+      setCompanies(prev => prev.filter(company => company.id !== companyId))
+      setSuccess('Company deleted successfully!')
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (error) {
+      console.error('Error deleting company:', error)
+      setError('Failed to delete company')
+    }
+  }
+
+  const handleUpdateCompanyStatus = async (companyId, newStatus) => {
+    try {
+      const { data, error: updateError } = await companyService.update(companyId, {
+        status: newStatus
+      })
+      
+      if (updateError) {
+        throw updateError
+      }
+
+      setCompanies(prev => prev.map(company => 
+        company.id === companyId ? { ...company, status: newStatus } : company
+      ))
+    } catch (error) {
+      console.error('Error updating company status:', error)
+      setError('Failed to update company status')
+    }
+  }
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -233,17 +196,26 @@ Best,
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'actively_applying': return 'bg-blue-100 text-blue-800'
+      case 'actively_tracking': return 'bg-blue-100 text-blue-800'
+      case 'applied': return 'bg-green-100 text-green-800'
       case 'researching': return 'bg-yellow-100 text-yellow-800'
       case 'interested': return 'bg-purple-100 text-purple-800'
+      case 'rejected': return 'bg-red-100 text-red-800'
       case 'phone_screen': return 'bg-blue-100 text-blue-800'
       case 'technical_interview': return 'bg-orange-100 text-orange-800'
       case 'final_interview': return 'bg-purple-100 text-purple-800'
       case 'offered': return 'bg-green-100 text-green-800'
-      case 'rejected': return 'bg-red-100 text-red-800'
       case 'accepted': return 'bg-green-100 text-green-800'
       default: return 'bg-gray-100 text-gray-800'
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+      </div>
+    )
   }
 
   return (
@@ -283,6 +255,34 @@ Best,
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {/* Alert Messages */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4"
+          >
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+              <p className="text-red-800">{error}</p>
+            </div>
+          </motion.div>
+        )}
+
+        {success && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4"
+          >
+            <div className="flex items-center">
+              <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
+              <p className="text-green-800">{success}</p>
+            </div>
+          </motion.div>
+        )}
+
         {/* Tab Navigation */}
         <div className="border-b border-gray-200 mb-8">
           <nav className="flex space-x-8">
@@ -306,6 +306,84 @@ Best,
           </nav>
         </div>
 
+        {/* Add Company Form */}
+        {showAddCompany && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-lg shadow p-6 mb-8"
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Add New Target Company</h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="Company name *"
+                value={newCompany.company_name}
+                onChange={(e) => setNewCompany({...newCompany, company_name: e.target.value})}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+              />
+              <input
+                type="text"
+                placeholder="Industry"
+                value={newCompany.industry}
+                onChange={(e) => setNewCompany({...newCompany, industry: e.target.value})}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+              />
+              <input
+                type="text"
+                placeholder="Location"
+                value={newCompany.location}
+                onChange={(e) => setNewCompany({...newCompany, location: e.target.value})}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+              />
+              <select
+                value={newCompany.priority_level}
+                onChange={(e) => setNewCompany({...newCompany, priority_level: e.target.value})}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="low">Low Priority</option>
+                <option value="medium">Medium Priority</option>
+                <option value="high">High Priority</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Company size"
+                value={newCompany.company_size}
+                onChange={(e) => setNewCompany({...newCompany, company_size: e.target.value})}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+              />
+              <input
+                type="url"
+                placeholder="Website URL"
+                value={newCompany.website_url}
+                onChange={(e) => setNewCompany({...newCompany, website_url: e.target.value})}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <textarea
+              placeholder="Notes about this company..."
+              value={newCompany.notes}
+              onChange={(e) => setNewCompany({...newCompany, notes: e.target.value})}
+              className="w-full mt-4 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500"
+              rows={3}
+            />
+            <div className="flex justify-end space-x-3 mt-4">
+              <button
+                onClick={() => setShowAddCompany(false)}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddCompany}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                Add Company
+              </button>
+            </div>
+          </motion.div>
+        )}
+
         {/* Target Companies Tab */}
         {activeTab === 'target-companies' && (
           <motion.div
@@ -313,97 +391,103 @@ Best,
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
           >
-            {targetCompanies.map((company) => (
-              <div key={company.id} className={`border-l-4 ${getPriorityColor(company.priority)} bg-white rounded-r-lg shadow p-6`}>
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-start space-x-4">
-                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
-                      <Building2 className="w-8 h-8 text-gray-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-gray-900">{company.name}</h3>
-                      <p className="text-gray-600">{company.industry} • {company.size}</p>
-                      <div className="flex items-center mt-2 space-x-3">
-                        <span className={`px-2 py-1 text-xs rounded ${getStatusColor(company.status)}`}>
-                          {company.status.replace('_', ' ')}
-                        </span>
-                        <span className="text-sm text-gray-600">Match: {company.matchScore}%</span>
+            {companies.length === 0 ? (
+              <div className="text-center py-12">
+                <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No companies added yet</h3>
+                <p className="text-gray-600 mb-4">Start by adding your first target company</p>
+                <button
+                  onClick={() => setShowAddCompany(true)}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                >
+                  Add Company
+                </button>
+              </div>
+            ) : (
+              companies.map((company) => (
+                <div key={company.id} className={`border-l-4 ${getPriorityColor(company.priority_level)} bg-white rounded-r-lg shadow p-6`}>
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex items-start space-x-4">
+                      <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
+                        <Building2 className="w-8 h-8 text-gray-600" />
                       </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button className="p-2 text-gray-400 hover:text-gray-600">
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button className="p-2 text-gray-400 hover:text-red-600">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="grid md:grid-cols-3 gap-6 mb-4">
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Open Positions</h4>
-                    <p className="text-2xl font-bold text-primary-600">{company.openPositions}</p>
-                    <button className="text-sm text-primary-600 hover:text-primary-700 flex items-center mt-1">
-                      View Jobs <ExternalLink className="w-3 h-3 ml-1" />
-                    </button>
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Contacts</h4>
-                    <div className="space-y-1">
-                      {company.contacts.map((contact, index) => (
-                        <div key={index} className="flex items-center justify-between">
-                          <span className="text-sm text-gray-700">{contact.name}</span>
-                          <span className={`px-2 py-0.5 text-xs rounded ${
-                            contact.status === 'responded' ? 'bg-green-100 text-green-800' :
-                            contact.status === 'contacted' ? 'bg-blue-100 text-blue-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {contact.status}
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900">{company.company_name}</h3>
+                        <p className="text-gray-600">{company.industry} • {company.location}</p>
+                        {company.company_size && (
+                          <p className="text-gray-600">{company.company_size} employees</p>
+                        )}
+                        <div className="flex items-center space-x-3 mt-2">
+                          <select
+                            value={company.status}
+                            onChange={(e) => handleUpdateCompanyStatus(company.id, e.target.value)}
+                            className={`px-2 py-1 text-xs rounded border-0 ${getStatusColor(company.status)}`}
+                          >
+                            <option value="interested">Interested</option>
+                            <option value="researching">Researching</option>
+                            <option value="actively_tracking">Actively Tracking</option>
+                            <option value="applied">Applied</option>
+                            <option value="rejected">Rejected</option>
+                          </select>
+                          <span className="text-sm text-gray-600 capitalize">
+                            {company.priority_level} Priority
                           </span>
                         </div>
-                      ))}
-                      {company.contacts.length === 0 && (
-                        <p className="text-sm text-gray-500">No contacts yet</p>
-                      )}
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button className="p-2 text-gray-400 hover:text-blue-600">
+                        <Bell className="w-4 h-4" />
+                      </button>
+                      <button className="p-2 text-gray-400 hover:text-green-600">
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button className="p-2 text-gray-400 hover:text-gray-600">
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteCompany(company.id)}
+                        className="p-2 text-gray-400 hover:text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Recent Activity</h4>
-                    <div className="space-y-1">
-                      {company.recentActivity.slice(0, 2).map((activity, index) => (
-                        <div key={index} className="text-sm text-gray-600">
-                          <span className="capitalize">{activity.type}</span> • {activity.date}
-                        </div>
-                      ))}
-                      {company.recentActivity.length === 0 && (
-                        <p className="text-sm text-gray-500">No recent activity</p>
+                  
+                  {company.notes && (
+                    <div className="mb-4">
+                      <h4 className="font-medium text-gray-900 mb-2">Notes</h4>
+                      <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded">{company.notes}</p>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-between items-center pt-4 border-t">
+                    <span className="text-sm text-gray-500">
+                      Added: {new Date(company.created_at).toLocaleDateString()}
+                    </span>
+                    <div className="flex space-x-3">
+                      {company.website_url && (
+                        <a
+                          href={company.website_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center"
+                        >
+                          Visit Website
+                          <ExternalLink className="w-4 h-4 ml-2" />
+                        </a>
                       )}
+                      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        View Jobs
+                      </button>
+                      <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                        Apply Now
+                      </button>
                     </div>
                   </div>
                 </div>
-                
-                <div className="mb-4">
-                  <h4 className="font-medium text-gray-900 mb-2">Notes</h4>
-                  <p className="text-sm text-gray-700">{company.notes}</p>
-                </div>
-                
-                <div className="flex justify-between items-center pt-4 border-t">
-                  <div className="flex space-x-3">
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
-                      <Send className="w-4 h-4 mr-2" />
-                      Send Message
-                    </button>
-                    <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center">
-                      <FileText className="w-4 h-4 mr-2" />
-                      Apply Now
-                    </button>
-                  </div>
-                  <span className="text-sm text-gray-500">Last updated: {company.lastUpdate}</span>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </motion.div>
         )}
 
@@ -414,81 +498,64 @@ Best,
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
           >
-            {jobApplications.map((application) => (
-              <div key={application.id} className="bg-white rounded-lg shadow p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900">{application.position}</h3>
-                    <p className="text-gray-600">{application.company} • {application.location}</p>
-                    <div className="flex items-center mt-2 space-x-3">
-                      <span className={`px-2 py-1 text-xs rounded ${getStatusColor(application.status)}`}>
-                        {application.status.replace('_', ' ')}
-                      </span>
-                      <span className="text-sm text-gray-600">Applied: {application.appliedDate}</span>
+            {jobApplications.length === 0 ? (
+              <div className="text-center py-12">
+                <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No job applications yet</h3>
+                <p className="text-gray-600 mb-4">Track your job applications here</p>
+                <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+                  Add Application
+                </button>
+              </div>
+            ) : (
+              jobApplications.map((application) => (
+                <div key={application.id} className="bg-white rounded-lg shadow p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">{application.position_title}</h3>
+                      <p className="text-gray-600">
+                        {application.target_companies?.company_name} • {application.target_companies?.location}
+                      </p>
+                      <div className="flex items-center mt-2 space-x-3">
+                        <span className={`px-2 py-1 text-xs rounded ${getStatusColor(application.status)}`}>
+                          {application.status.replace('_', ' ')}
+                        </span>
+                        <span className="text-sm text-gray-600">
+                          Applied: {new Date(application.applied_date).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {application.salary_range && (
+                        <p className="font-semibold text-green-600">{application.salary_range}</p>
+                      )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-green-600">{application.salary}</p>
-                    {application.nextStep && (
-                      <p className="text-sm text-gray-600">
-                        Next: {application.nextStep} on {application.nextStepDate}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                
-                {/* Application Timeline */}
-                <div className="mb-4">
-                  <h4 className="font-medium text-gray-900 mb-3">Application Timeline</h4>
-                  <div className="flex items-center space-x-4 overflow-x-auto">
-                    {application.timeline.map((stage, index) => (
-                      <div key={index} className="flex items-center space-x-2 min-w-max">
-                        <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
-                          stage.completed ? 'bg-green-600' : 'bg-gray-300'
-                        }`}>
-                          {stage.completed && <CheckCircle className="w-3 h-3 text-white" />}
-                        </div>
-                        <div className="text-center">
-                          <p className="text-sm font-medium text-gray-900">{stage.stage}</p>
-                          <p className="text-xs text-gray-600">{stage.date}</p>
-                        </div>
-                        {index < application.timeline.length - 1 && (
-                          <div className="w-8 h-0.5 bg-gray-300" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                
-                <div className="grid md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Recruiter Contact</h4>
-                    <p className="text-sm text-gray-700">{application.recruiter}</p>
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Notes</h4>
-                    <p className="text-sm text-gray-700">{application.notes}</p>
-                  </div>
-                </div>
-                
-                <div className="flex justify-between items-center pt-4 border-t">
-                  <div className="flex space-x-3">
-                    <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-                      Update Status
-                    </button>
-                    <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-                      Add Notes
-                    </button>
-                  </div>
-                  {application.nextStep && (
+                  
+                  {application.notes && (
+                    <div className="mb-4">
+                      <h4 className="font-medium text-gray-900 mb-2">Notes</h4>
+                      <p className="text-sm text-gray-700">{application.notes}</p>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-between items-center pt-4 border-t">
+                    <div className="flex space-x-3">
+                      <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+                        Update Status
+                      </button>
+                      <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                        Add Notes
+                      </button>
+                    </div>
                     <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center">
                       <Calendar className="w-4 h-4 mr-2" />
-                      Prepare for {application.nextStep}
+                      Schedule Interview
                     </button>
-                  )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </motion.div>
         )}
 
@@ -507,52 +574,61 @@ Best,
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Generate Message
+                  Create Template
                 </button>
               </div>
               
-              <div className="grid md:grid-cols-2 gap-6">
-                {messageTemplates.map((template) => (
-                  <div key={template.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="font-medium text-gray-900">{template.title}</h3>
-                        <span className="text-sm text-gray-600 capitalize">{template.type}</span>
+              {messageTemplates.length === 0 ? (
+                <div className="text-center py-8">
+                  <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No message templates yet</h3>
+                  <p className="text-gray-600 mb-4">Create templates for reaching out to recruiters and contacts</p>
+                  <button 
+                    onClick={() => setShowMessageGenerator(true)}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                  >
+                    Create First Template
+                  </button>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-6">
+                  {messageTemplates.map((template) => (
+                    <div key={template.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-medium text-gray-900">{template.template_name}</h3>
+                          <span className="text-sm text-gray-600 capitalize">{template.template_type}</span>
+                        </div>
+                        <button className="text-primary-600 hover:text-primary-700">
+                          <Edit className="w-4 h-4" />
+                        </button>
                       </div>
-                      <button className="text-primary-600 hover:text-primary-700">
-                        <Edit className="w-4 h-4" />
+                      
+                      <div className="mb-4">
+                        <p className="text-sm font-medium text-gray-700 mb-1">Subject:</p>
+                        <p className="text-sm text-gray-600 italic">{template.subject_line}</p>
+                      </div>
+                      
+                      <div className="mb-4">
+                        <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
+                        <div className="bg-gray-50 p-3 rounded text-sm text-gray-700 max-h-32 overflow-y-auto">
+                          {template.message_content.substring(0, 200)}...
+                        </div>
+                      </div>
+                      
+                      <div className="mb-4">
+                        <p className="text-sm text-gray-600">
+                          Used {template.usage_count || 0} times
+                        </p>
+                      </div>
+                      
+                      <button className="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700">
+                        Use Template
                       </button>
                     </div>
-                    
-                    <div className="mb-4">
-                      <p className="text-sm font-medium text-gray-700 mb-1">Subject:</p>
-                      <p className="text-sm text-gray-600 italic">{template.subject}</p>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
-                      <div className="bg-gray-50 p-3 rounded text-sm text-gray-700 max-h-32 overflow-y-auto">
-                        {template.content.substring(0, 200)}...
-                      </div>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <p className="text-sm font-medium text-gray-700 mb-2">Variables:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {template.variables.map((variable, index) => (
-                          <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                            {variable}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <button className="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700">
-                      Use Template
-                    </button>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -564,64 +640,17 @@ Best,
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
           >
-            {/* Upcoming Interviews */}
+            {/* Upcoming Interviews Placeholder */}
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-6">Upcoming Interviews</h2>
               
-              <div className="space-y-4">
-                {upcomingInterviews.map((interview) => (
-                  <div key={interview.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="font-bold text-gray-900">{interview.type}</h3>
-                        <p className="text-gray-600">{interview.company} • {interview.position}</p>
-                        <div className="flex items-center mt-2 space-x-4 text-sm text-gray-600">
-                          <span className="flex items-center">
-                            <Calendar className="w-4 h-4 mr-1" />
-                            {interview.date} at {interview.time}
-                          </span>
-                          <span className="flex items-center">
-                            <Clock className="w-4 h-4 mr-1" />
-                            {interview.duration}
-                          </span>
-                        </div>
-                      </div>
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                        {interview.status}
-                      </span>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <h4 className="font-medium text-gray-900 mb-2">Interviewer</h4>
-                      <p className="text-sm text-gray-700">{interview.interviewer}</p>
-                      <p className="text-sm text-gray-600">Platform: {interview.platform}</p>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <h4 className="font-medium text-gray-900 mb-2">Preparation Notes</h4>
-                      <ul className="text-sm text-gray-700 space-y-1">
-                        {interview.preparationNotes.map((note, index) => (
-                          <li key={index} className="flex items-start">
-                            <span className="text-primary-600 mr-2">•</span>
-                            {note}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    
-                    <div className="flex space-x-3">
-                      <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-                        Start Mock Interview
-                      </button>
-                      <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-                        Add to Calendar
-                      </button>
-                      <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                        Preparation Guide
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              <div className="text-center py-8">
+                <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No upcoming interviews</h3>
+                <p className="text-gray-600 mb-4">Schedule mock interviews to practice</p>
+                <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+                  Schedule Mock Interview
+                </button>
               </div>
             </div>
 

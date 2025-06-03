@@ -17,6 +17,7 @@ import {
   Building2,
   LogOut,
   Quote,
+  Brain,
   CheckCircle
 } from 'lucide-react'
 import { PHASES } from '../constants'
@@ -66,11 +67,7 @@ const Dashboard = () => {
     }
   }, [])
   
-  const [projects, setProjects] = useState([
-    { id: 1, title: 'Personal Portfolio Website', status: 'in_progress', priority: 'high' },
-    { id: 2, title: 'React Learning Project', status: 'todo', priority: 'medium' },
-    { id: 3, title: 'Data Analysis Certification', status: 'completed', priority: 'high' }
-  ])
+  const { projects, loading } = useProjects();
 
   const handleAddProject = () => {
     if (newProject.title.trim()) {
@@ -631,6 +628,17 @@ What's your favorite React pattern?
                 >
                   <Building2 className="w-5 h-5 mr-3 text-orange-500" />
                   Target Companies
+                </Link>
+
+                
+                <Link to="/quiz" className="flex items-center p-3 text-gray-700 hover:bg-gray-50 rounded-lg">
+                      <Brain className="w-5 h-5 mr-3 text-purple-500" />
+                      Take Skills Assessment
+                </Link>
+
+                <Link to="/case-studies" className="flex items-center p-3 text-gray-700 hover:bg-gray-50 rounded-lg">
+                    <BookOpen className="w-5 h-5 mr-3 text-orange-500" />
+                    Case Studies
                 </Link>
               </div>
             </motion.div>
