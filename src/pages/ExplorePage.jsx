@@ -12,16 +12,85 @@ import {
   Star,
   Clock,
   Users,
-  TrendingUp,
   ArrowRight,
-  ArrowLeft
+  ArrowLeft,
+  Loader
 } from 'lucide-react'
+import { useSupabaseQuery } from '../hooks/useSupabaseQuery'
+import { supabase } from '../services/supabase'
+import { useAuth } from '../context/AuthContext'
 
 const ExplorePage = () => {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('companies')
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedFilters, setSelectedFilters] = useState([])
+  const [selectedFilters, setSelectedFilters] = useState({
+    companies: 'all',
+    roles: 'all',
+    resources: 'all',
+    studies: 'all'
+  })
+
+  // Fetch functions
+  const fetchCompanies = async () => {
+    return await supabase
+      .from('explore_companies')
+      .select('*')
+      .order('name')
+  }
+
+  const fetchJobRoles = async () => {
+    return await supabase
+      .from('explore_job_roles')
+      .select('*')
+      .order('title')
+  }
+
+  const fetchAIResources = async () => {
+    return await supabase
+      .from('explore_ai_resources')
+      .select('*')
+      .order('created_at', { ascending: false })
+  }
+
+  const fetchCaseStudies = async () => {
+    return await supabase
+      .from('explore_case_studies')
+      .select('*')
+      .order('created_at', { ascending: false })
+  }
+
+  // useSupabaseQuery hooks
+  const { 
+    data: companies, 
+    loading: loadingCompanies,
+    error: errorCompanies,
+    refetch: refetchCompanies
+  } = useSupabaseQuery(fetchCompanies, [])
+
+  const { 
+    data: jobRoles, 
+    loading: loadingJobRoles,
+    error: errorJobRoles,
+    refetch: refetchJobRoles
+  } = useSupabaseQuery(fetchJobRoles, [])
+
+  const { 
+    data: aiResources, 
+    loading: loadingAIResources,
+    error: errorAIResources,
+    refetch: refetchAIResources
+  } = useSupabaseQuery(fetchAIResources, [])
+
+  const { 
+    data: caseStudies, 
+    loading: loadingCaseStudies,
+    error: errorCaseStudies,
+    refetch: refetchCaseStudies
+  } = useSupabaseQuery(fetchCaseStudies, [])
+
+  // Filtered data state
   const [filteredData, setFilteredData] = useState({
     companies: [],
     roles: [],
@@ -29,11 +98,10 @@ const ExplorePage = () => {
     studies: []
   })
 
-  // Filter data based on search query
+  // Update filteredData when searchQuery or source data changes
   useEffect(() => {
-    const filterBySearch = (items, searchFields) => {
-      if (!searchQuery.trim()) return items
-      
+    const filterBySearch = (items = [], searchFields = []) => {
+      if (!items || !searchQuery.trim()) return items || []
       return items.filter(item => 
         searchFields.some(field => 
           item[field]?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -42,190 +110,100 @@ const ExplorePage = () => {
     }
 
     setFilteredData({
-      companies: filterBySearch(companyData, ['name', 'industry', 'description']),
+      companies: filterBySearch(companies, ['name', 'industry', 'description']),
       roles: filterBySearch(jobRoles, ['title', 'category', 'description']),
       resources: filterBySearch(aiResources, ['title', 'description', 'source']),
-      studies: filterBySearch(caseStudies, ['title', 'category', 'keyLearnings'])
+      studies: filterBySearch(caseStudies, ['title', 'category', 'key_learnings'])
     })
-  }, [searchQuery])
+  }, [searchQuery, companies, jobRoles, aiResources, caseStudies])
 
-  // Initialize filtered data
+  // Initialize filteredData once data is loaded
   useEffect(() => {
     setFilteredData({
-      companies: companyData,
-      roles: jobRoles,
-      resources: aiResources,
-      studies: caseStudies
+      companies: companies || [],
+      roles: jobRoles || [],
+      resources: aiResources || [],
+      studies: caseStudies || []
     })
-  }, [])
+  }, [companies, jobRoles, aiResources, caseStudies])
+
+  // Save item to favorites
+  const saveToFavorites = async (itemType, itemId) => {
+    if (!user) {
+      alert('Please sign in to save items')
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_favorites')
+        .insert({
+          user_id: user.id,
+          item_type: itemType,
+          item_id: itemId,
+          created_at: new Date().toISOString()
+        })
+
+      if (error) throw error
+      alert(`Item saved to your favorites!`)
+    } catch (error) {
+      console.error('Error saving to favorites:', error)
+      alert('Failed to save to favorites. Please try again.')
+    }
+  }
 
   const tabs = [
     { id: 'companies', label: 'Company Research', icon: Building2, color: 'text-blue-600' },
     { id: 'roles', label: 'Job Roles', icon: Briefcase, color: 'text-green-600' },
-    { id: 'ai-research', label: 'AI Research', icon: Brain, color: 'text-purple-600' },
-    { id: 'case-studies', label: 'Case Studies', icon: BookOpen, color: 'text-orange-600' }
-  ]
-
-  const companyData = [
-    {
-      id: 1,
-      name: 'Google',
-      industry: 'Technology',
-      size: '100,000+',
-      rating: 4.4,
-      description: 'Leading technology company focusing on search, cloud computing, and AI.',
-      openRoles: 245,
-      culture: ['Innovation', 'Collaboration', 'Growth'],
-      benefits: ['Health Insurance', 'Stock Options', 'Learning Budget'],
-      recentNews: 'Google announces new AI initiatives for 2024'
-    },
-    {
-      id: 2,
-      name: 'Microsoft',
-      industry: 'Technology',
-      size: '50,000+',
-      rating: 4.5,
-      description: 'Global technology company known for software, cloud services, and productivity tools.',
-      openRoles: 189,
-      culture: ['Diversity', 'Innovation', 'Empowerment'],
-      benefits: ['Healthcare', 'Retirement Plans', 'Flexible Work'],
-      recentNews: 'Microsoft expands Azure AI capabilities'
-    },
-    {
-      id: 3,
-      name: 'Tesla',
-      industry: 'Automotive/Energy',
-      size: '10,000+',
-      rating: 3.9,
-      description: 'Electric vehicle and clean energy company revolutionizing transportation.',
-      openRoles: 156,
-      culture: ['Innovation', 'Sustainability', 'Fast-paced'],
-      benefits: ['Stock Options', 'Health Insurance', 'Employee Discounts'],
-      recentNews: 'Tesla announces new Gigafactory location'
-    }
-  ]
-
-  const jobRoles = [
-    {
-      id: 1,
-      title: 'Software Engineer',
-      category: 'Technology',
-      level: 'Mid-Level',
-      avgSalary: '$95,000',
-      growth: '+22%',
-      skills: ['Python', 'React', 'Node.js', 'SQL'],
-      description: 'Design and develop software applications and systems.',
-      demand: 'High',
-      companies: ['Google', 'Microsoft', 'Meta']
-    },
-    {
-      id: 2,
-      title: 'Data Scientist',
-      category: 'Analytics',
-      level: 'Senior',
-      avgSalary: '$115,000',
-      growth: '+35%',
-      skills: ['Python', 'R', 'SQL', 'Machine Learning'],
-      description: 'Analyze complex data to drive business decisions.',
-      demand: 'Very High',
-      companies: ['Netflix', 'Uber', 'Airbnb']
-    },
-    {
-      id: 3,
-      title: 'Product Manager',
-      category: 'Product',
-      level: 'Mid-Level',
-      avgSalary: '$125,000',
-      growth: '+18%',
-      skills: ['Strategy', 'Analytics', 'Communication', 'Agile'],
-      description: 'Lead product development from conception to launch.',
-      demand: 'High',
-      companies: ['Apple', 'Amazon', 'Spotify']
-    }
-  ]
-
-  const aiResources = [
-    {
-      id: 1,
-      title: 'The Future of AI in Workplace',
-      type: 'Article',
-      readTime: '8 min',
-      difficulty: 'Beginner',
-      source: 'Harvard Business Review',
-      description: 'How artificial intelligence is reshaping modern workplaces and job roles.',
-      tags: ['Future of Work', 'AI Trends', 'Career Planning']
-    },
-    {
-      id: 2,
-      title: 'Machine Learning Career Path Guide',
-      type: 'Guide',
-      readTime: '15 min',
-      difficulty: 'Intermediate',
-      source: 'Coursera',
-      description: 'Complete roadmap for transitioning into machine learning careers.',
-      tags: ['Machine Learning', 'Career Transition', 'Skills Development']
-    },
-    {
-      id: 3,
-      title: 'AI Tools for Productivity',
-      type: 'Tutorial',
-      readTime: '12 min',
-      difficulty: 'Beginner',
-      source: 'TechCrunch',
-      description: 'Top AI tools that can boost your productivity and efficiency.',
-      tags: ['Productivity', 'AI Tools', 'Automation']
-    }
-  ]
-
-  const caseStudies = [
-    {
-      id: 1,
-      title: 'How Sarah Transitioned from Marketing to Data Science',
-      category: 'Career Transition',
-      duration: '18 months',
-      outcome: 'Senior Data Scientist at Spotify',
-      keyLearnings: ['Self-taught Python', 'Built portfolio projects', 'Networked strategically'],
-      difficulty: 'Advanced',
-      completionRate: '0%'
-    },
-    {
-      id: 2,
-      title: 'Building a Tech Startup: From Idea to IPO',
-      category: 'Entrepreneurship',
-      duration: '5 years',
-      outcome: 'Successful IPO at $2B valuation',
-      keyLearnings: ['Market validation', 'Team building', 'Investor relations'],
-      difficulty: 'Expert',
-      completionRate: '0%'
-    },
-    {
-      id: 3,
-      title: 'Remote Work Success Strategies',
-      category: 'Work-Life Balance',
-      duration: '6 months',
-      outcome: '40% productivity increase',
-      keyLearnings: ['Time management', 'Communication tools', 'Boundary setting'],
-      difficulty: 'Intermediate',
-      completionRate: '75%'
-    }
+    { id: 'resources', label: 'AI Research', icon: Brain, color: 'text-purple-600' },
+    { id: 'studies', label: 'Case Studies', icon: BookOpen, color: 'text-orange-600' }
   ]
 
   const getDifficultyColor = (difficulty) => {
-    switch (difficulty) {
-      case 'Beginner': return 'bg-green-100 text-green-800'
-      case 'Intermediate': return 'bg-yellow-100 text-yellow-800'
-      case 'Advanced': return 'bg-orange-100 text-orange-800'
-      case 'Expert': return 'bg-red-100 text-red-800'
+    switch (difficulty?.toLowerCase()) {
+      case 'beginner': return 'bg-green-100 text-green-800'
+      case 'intermediate': return 'bg-yellow-100 text-yellow-800'
+      case 'advanced': return 'bg-orange-100 text-orange-800'
+      case 'expert': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
 
   const getDemandColor = (demand) => {
-    switch (demand) {
-      case 'Very High': return 'text-green-600 bg-green-100'
-      case 'High': return 'text-blue-600 bg-blue-100'
-      case 'Medium': return 'text-yellow-600 bg-yellow-100'
+    switch (demand?.toLowerCase()) {
+      case 'very high': return 'text-green-600 bg-green-100'
+      case 'high': return 'text-blue-600 bg-blue-100'
+      case 'medium': return 'text-yellow-600 bg-yellow-100'
       default: return 'text-gray-600 bg-gray-100'
+    }
+  }
+
+  // Loading / error for active tab
+  const getActiveTabStatus = () => {
+    switch (activeTab) {
+      case 'companies':
+        return { loading: loadingCompanies, error: errorCompanies }
+      case 'roles':
+        return { loading: loadingJobRoles, error: errorJobRoles }
+      case 'resources':
+        return { loading: loadingAIResources, error: errorAIResources }
+      case 'studies':
+        return { loading: loadingCaseStudies, error: errorCaseStudies }
+      default:
+        return { loading: false, error: null }
+    }
+  }
+  const { loading, error } = getActiveTabStatus()
+
+  // Helper to parse array-like fields (JSON or comma-separated)
+  const parseArrayField = (arrayString) => {
+    if (!arrayString) return []
+    if (Array.isArray(arrayString)) return arrayString
+
+    try {
+      return JSON.parse(arrayString)
+    } catch {
+      return arrayString.split(',').map(item => item.trim())
     }
   }
 
@@ -291,104 +269,172 @@ const ExplorePage = () => {
             })}
           </nav>
         </div>
+        
+        {/* Loading State */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader className="w-10 h-10 text-primary-600 animate-spin mb-4" />
+            <p className="text-gray-600">Loading data...</p>
+          </div>
+        )}
+        
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <p className="text-red-700 mb-4">Error loading data. Please try again later.</p>
+            <button 
+              onClick={() => {
+                if (activeTab === 'companies') refetchCompanies()
+                if (activeTab === 'roles') refetchJobRoles()
+                if (activeTab === 'resources') refetchAIResources()
+                if (activeTab === 'studies') refetchCaseStudies()
+              }}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* No Results State */}
+        {!loading && !error && filteredData[activeTab]?.length === 0 && (
+          <div className="text-center py-12">
+            <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No results found</h3>
+            <p className="text-gray-600">
+              {searchQuery 
+                ? 'Try adjusting your search terms or filters' 
+                : "We couldn't find any data in this category yet"}
+            </p>
+          </div>
+        )}
 
         {/* Company Research Tab */}
-        {activeTab === 'companies' && (
+        {activeTab === 'companies' && !loading && !error && filteredData.companies?.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
           >
-            <div className="space-y-6">
-              {(searchQuery ? filteredData.companies : companyData).map((company) => (
-                <div key={company.id} className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
-                        <Building2 className="w-8 h-8 text-gray-600" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-bold text-gray-900">{company.name}</h3>
-                        <p className="text-gray-600">{company.industry} • {company.size} employees</p>
-                        <div className="flex items-center mt-1">
-                          <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                          <span className="text-sm text-gray-600 ml-1">{company.rating}/5.0</span>
-                        </div>
-                      </div>
+            {filteredData.companies.map((company) => (
+              <div 
+                key={company.id} 
+                className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow"
+              >
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <Building2 className="w-8 h-8 text-gray-600" />
                     </div>
-                    <div className="text-right">
-                      <span className="text-2xl font-bold text-primary-600">{company.openRoles}</span>
-                      <p className="text-sm text-gray-600">Open Roles</p>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">{company.name}</h3>
+                      <p className="text-gray-600">
+                        {company.industry} • {company.size} employees
+                      </p>
+                      <div className="flex items-center mt-1">
+                        <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                        <span className="text-sm text-gray-600 ml-1">
+                          {company.rating}/5.0
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  
-                  <p className="text-gray-700 mb-4">{company.description}</p>
-                  
-                  <div className="grid md:grid-cols-3 gap-4 mb-4">
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Culture</h4>
-                      <div className="flex flex-wrap gap-1">
-                        {company.culture.map((item, index) => (
-                          <span key={index} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Benefits</h4>
-                      <div className="flex flex-wrap gap-1">
-                        {company.benefits.map((item, index) => (
-                          <span key={index} className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Recent News</h4>
-                      <p className="text-sm text-gray-600">{company.recentNews}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-between items-center pt-4 border-t">
-                    <button className="text-primary-600 hover:text-primary-700 font-medium">
-                      View Detailed Research
-                    </button>
-                    <div className="flex space-x-3">
-                      <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-                        Add to Watchlist
-                      </button>
-                      <a
-                        href={`https://careers.${company.name.toLowerCase()}.com`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center"
-                      >
-                        View Jobs
-                        <ExternalLink className="w-4 h-4 ml-2" />
-                      </a>
-                    </div>
+                  <div className="text-right">
+                    <span className="text-2xl font-bold text-primary-600">
+                      {company.open_roles}
+                    </span>
+                    <p className="text-sm text-gray-600">Open Roles</p>
                   </div>
                 </div>
-              ))}
-            </div>
+                
+                <p className="text-gray-700 mb-4">{company.description}</p>
+                
+                <div className="grid md:grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-2">Culture</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {parseArrayField(company.culture).map((item, index) => (
+                        <span 
+                          key={index} 
+                          className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-2">Benefits</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {parseArrayField(company.benefits).map((item, index) => (
+                        <span 
+                          key={index} 
+                          className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-2">Recent News</h4>
+                    <p className="text-sm text-gray-600">{company.recent_news}</p>
+                  </div>
+                </div>
+                
+                <div className="flex justify-between items-center pt-4 border-t">
+                  <button 
+                    onClick={() => saveToFavorites('company', company.id)}
+                    className="text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    Save to Favorites
+                  </button>
+                  <div className="flex space-x-3">
+                    <button 
+                      onClick={() => navigate(`/companies/${company.id}`)}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                    >
+                      View Detailed Research
+                    </button>
+                    <a
+                      href={
+                        company.website || 
+                        `https://careers.${company.name
+                          .toLowerCase()
+                          .replace(/\s+/g, '')}.com`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center"
+                    >
+                      View Jobs
+                      <ExternalLink className="w-4 h-4 ml-2" />
+                    </a>
+                  </div>
+                </div>
+              </div>
+            ))}
           </motion.div>
         )}
 
         {/* Job Roles Tab */}
-        {activeTab === 'roles' && (
+        {activeTab === 'roles' && !loading && !error && filteredData.roles?.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
           >
-            {(searchQuery ? filteredData.roles : jobRoles).map((role) => (
-              <div key={role.id} className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow">
+            {filteredData.roles.map((role) => (
+              <div 
+                key={role.id} 
+                className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow"
+              >
                 <div className="mb-4">
                   <h3 className="text-lg font-bold text-gray-900 mb-2">{role.title}</h3>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-600">{role.category} • {role.level}</span>
+                    <span className="text-sm text-gray-600">
+                      {role.category} • {role.level}
+                    </span>
                     <span className={`px-2 py-1 text-xs rounded ${getDemandColor(role.demand)}`}>
                       {role.demand} Demand
                     </span>
@@ -399,7 +445,7 @@ const ExplorePage = () => {
                 <div className="space-y-3 mb-4">
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Avg. Salary</span>
-                    <span className="font-semibold text-green-600">{role.avgSalary}</span>
+                    <span className="font-semibold text-green-600">{role.avg_salary}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-gray-600">Growth Rate</span>
@@ -410,8 +456,11 @@ const ExplorePage = () => {
                 <div className="mb-4">
                   <h4 className="text-sm font-medium text-gray-900 mb-2">Key Skills</h4>
                   <div className="flex flex-wrap gap-1">
-                    {role.skills.map((skill, index) => (
-                      <span key={index} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
+                    {parseArrayField(role.skills).map((skill, index) => (
+                      <span 
+                        key={index} 
+                        className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
+                      >
                         {skill}
                       </span>
                     ))}
@@ -420,10 +469,15 @@ const ExplorePage = () => {
                 
                 <div className="mb-4">
                   <h4 className="text-sm font-medium text-gray-900 mb-2">Top Companies</h4>
-                  <p className="text-sm text-gray-600">{role.companies.join(', ')}</p>
+                  <p className="text-sm text-gray-600">
+                    {parseArrayField(role.companies).join(', ')}
+                  </p>
                 </div>
                 
-                <button className="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 flex items-center justify-center">
+                <button 
+                  onClick={() => navigate(`/roles/${role.id}`)}
+                  className="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 flex items-center justify-center"
+                >
                   Explore Career Path
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </button>
@@ -433,14 +487,17 @@ const ExplorePage = () => {
         )}
 
         {/* AI Research Tab */}
-        {activeTab === 'ai-research' && (
+        {activeTab === 'resources' && !loading && !error && filteredData.resources?.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
           >
-            {(searchQuery ? filteredData.resources : aiResources).map((resource) => (
-              <div key={resource.id} className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow">
+            {filteredData.resources.map((resource) => (
+              <div 
+                key={resource.id} 
+                className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow"
+              >
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
@@ -456,7 +513,7 @@ const ExplorePage = () => {
                       </span>
                       <span className="flex items-center">
                         <Clock className="w-4 h-4 mr-1" />
-                        {resource.readTime}
+                        {resource.read_time}
                       </span>
                       <span className="flex items-center">
                         <Users className="w-4 h-4 mr-1" />
@@ -465,8 +522,11 @@ const ExplorePage = () => {
                     </div>
                     <p className="text-gray-700 mb-3">{resource.description}</p>
                     <div className="flex flex-wrap gap-1">
-                      {resource.tags.map((tag, index) => (
-                        <span key={index} className="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded">
+                      {parseArrayField(resource.tags).map((tag, index) => (
+                        <span 
+                          key={index} 
+                          className="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded"
+                        >
                           {tag}
                         </span>
                       ))}
@@ -475,11 +535,14 @@ const ExplorePage = () => {
                 </div>
                 
                 <div className="flex justify-between items-center pt-4 border-t">
-                  <button className="text-primary-600 hover:text-primary-700 font-medium">
+                  <button 
+                    onClick={() => saveToFavorites('resource', resource.id)}
+                    className="text-primary-600 hover:text-primary-700 font-medium"
+                  >
                     Save for Later
                   </button>
                   <a
-                    href={`https://example.com/${resource.type}/${resource.id}`}
+                    href={resource.url || '#'}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center"
@@ -494,14 +557,17 @@ const ExplorePage = () => {
         )}
 
         {/* Case Studies Tab */}
-        {activeTab === 'case-studies' && (
+        {activeTab === 'studies' && !loading && !error && filteredData.studies?.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="grid md:grid-cols-2 gap-6"
           >
-            {(searchQuery ? filteredData.studies : caseStudies).map((study) => (
-              <div key={study.id} className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow">
+            {filteredData.studies.map((study) => (
+              <div 
+                key={study.id} 
+                className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow"
+              >
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-bold text-gray-900">{study.title}</h3>
@@ -518,13 +584,15 @@ const ExplorePage = () => {
                 
                 <div className="mb-4">
                   <h4 className="font-medium text-gray-900 mb-2">Outcome</h4>
-                  <p className="text-sm text-green-700 bg-green-50 p-2 rounded">{study.outcome}</p>
+                  <p className="text-sm text-green-700 bg-green-50 p-2 rounded">
+                    {study.outcome}
+                  </p>
                 </div>
                 
                 <div className="mb-4">
                   <h4 className="font-medium text-gray-900 mb-2">Key Learnings</h4>
                   <ul className="text-sm text-gray-700 space-y-1">
-                    {study.keyLearnings.map((learning, index) => (
+                    {parseArrayField(study.key_learnings).map((learning, index) => (
                       <li key={index} className="flex items-start">
                         <span className="text-primary-600 mr-2">•</span>
                         {learning}
@@ -533,21 +601,30 @@ const ExplorePage = () => {
                   </ul>
                 </div>
                 
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium text-gray-700">Progress</span>
-                    <span className="text-sm text-gray-600">{study.completionRate}</span>
+                {user && (
+                  <div className="mb-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-gray-700">Your Progress</span>
+                      <span className="text-sm text-gray-600">
+                        {study.user_progress || '0%'}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-primary-600 h-2 rounded-full transition-all"
+                        style={{ width: study.user_progress || '0%' }}
+                      />
+                    </div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-primary-600 h-2 rounded-full transition-all"
-                      style={{ width: study.completionRate }}
-                    />
-                  </div>
-                </div>
+                )}
                 
-                <button className="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 flex items-center justify-center">
-                  {study.completionRate === '0%' ? 'Start Case Study' : 'Continue Study'}
+                <button 
+                  onClick={() => navigate(`/case-studies/${study.id}`)}
+                  className="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 flex items-center justify-center"
+                >
+                  {study.user_progress && study.user_progress !== '0%' 
+                    ? 'Continue Study' 
+                    : 'Start Case Study'}
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </button>
               </div>
